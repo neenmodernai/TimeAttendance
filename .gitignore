@@ -1,0 +1,9 @@
+# .gitignore
+node_modules
+.next
+.env*
+!.env.example
+# Contains staff emails/phones and PIN hashes - never commit
+data/
+*.xlsx
+next-env.d.ts
