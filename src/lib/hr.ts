@@ -31,11 +31,13 @@ export function hrRows(rows: EmpSummary[]): HrRow[] {
 export function hrSummary(rows: EmpSummary[]) {
   const t = rows.reduce((a, r) => ({
     ok: a.ok + r.ok, late: a.late + r.late, norecord: a.norecord + r.norecord, partial: a.partial + r.missing_in,
-    leave: a.leave + r.leave_days, sick: a.sick + r.leave_sick, personal: a.personal + r.leave_personal, vacation: a.vacation + r.leave_vacation,
+    leave: a.leave + r.leave_days,
     gps: a.gps + r.gps_issues, missOut: a.missOut + r.missing_out,
     inSum: a.inSum + r.in_min_sum, inN: a.inN + r.in_n, hSum: a.hSum + r.hours_sum, hN: a.hN + r.hours_n,
-  }), { ok: 0, late: 0, norecord: 0, partial: 0, leave: 0, sick: 0, personal: 0, vacation: 0, gps: 0, missOut: 0, inSum: 0, inN: 0, hSum: 0, hN: 0 });
+  }), { ok: 0, late: 0, norecord: 0, partial: 0, leave: 0, gps: 0, missOut: 0, inSum: 0, inN: 0, hSum: 0, hN: 0 });
   const present = t.ok + t.late + t.partial;
+  const leaveBy: Record<string, number> = {};
+  for (const r of rows) for (const [k, v] of Object.entries(r.leave_by)) leaveBy[k] = (leaveBy[k] ?? 0) + v;
 
   // when do people arrive? (15-minute buckets, clamped to 07:30–10:30)
   const buckets = new Map<number, number>();
@@ -58,7 +60,7 @@ export function hrSummary(rows: EmpSummary[]) {
     c.ok += r.ok; c.late += r.late; c.leave += r.leave_days; c.norecord += r.norecord; byDept.set(k, c);
   }
   return {
-    totals: t, headcount: rows.length,
+    totals: t, leaveBy, headcount: rows.length,
     onTimePct: pct(t.ok, t.ok + t.late), latePct: pct(t.late, t.ok + t.late), attendPct: pct(present, present + t.norecord),
     avgIn: t.inN ? t.inSum / t.inN : null, avgHours: t.hN ? t.hSum / t.hN : null,
     buckets: [...buckets.entries()].sort((a, b) => a[0] - b[0]),

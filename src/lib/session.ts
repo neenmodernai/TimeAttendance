@@ -46,12 +46,17 @@ export function readToken(t: string): string | null {
   } catch { return null; }
 }
 
-/** Constant-time admin password check (ADMIN_PASSWORD env). */
-export function checkAdminPassword(pw: string): boolean {
-  const real = process.env.ADMIN_PASSWORD ?? "";
+export type Role = "hr" | "owner";
+const pwEq = (pw: string, real: string | undefined) => {
   if (!real) return false;
   const h = (s: string) => createHmac("sha256", "pw").update(s).digest();
   return timingSafeEqual(h(pw), h(real));
+};
+/** OWNER_PASSWORD -> owner (everything), ADMIN_PASSWORD -> HR. Owner is checked first. */
+export function roleForPassword(pw: string): Role | null {
+  if (pwEq(pw, process.env.OWNER_PASSWORD)) return "owner";
+  if (pwEq(pw, process.env.ADMIN_PASSWORD)) return "hr";
+  return null;
 }
 
 /** days = 0 -> browser-session cookie */
@@ -64,4 +69,7 @@ export function setSession(kind: Kind, sub: string | undefined, days: number) {
 }
 export const clearSession = (kind: Kind) => cookies().delete(NAME[kind]);
 export const getEmployeeId = () => read("emp")?.sub ?? null;
+/** Any signed-in HR area user (HR or owner). */
 export const isAdmin = () => read("admin") !== null;
+export const getRole = (): Role | null => { const p = read("admin"); return p ? (p.sub === "owner" ? "owner" : "hr") : null; };
+export const isOwner = () => getRole() === "owner";

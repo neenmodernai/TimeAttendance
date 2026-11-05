@@ -11,7 +11,7 @@ export type DayRow = {
 export type EmpSummary = {
   id: string; name: string; dept: string | null;
   ok: number; late: number; norecord: number; leave_days: number;
-  leave_sick: number; leave_personal: number; leave_vacation: number;
+  leave_by: Record<string, number>;  // approved leave days per leave type code
   gps_issues: number; missing_in: number; missing_out: number;
   hours_sum: number; hours_n: number; in_min_sum: number; in_n: number; late_streak: number;
   days: DayRow[];
@@ -82,7 +82,7 @@ export async function periodReport(start: string, end: string, sb: SupabaseClien
   const rows: EmpSummary[] = [];
   for (const e of emps) {
     const s: EmpSummary = {
-      id: e.id, name: e.name, dept: e.dept, ok: 0, late: 0, norecord: 0, leave_days: 0, leave_sick: 0, leave_personal: 0, leave_vacation: 0,
+      id: e.id, name: e.name, dept: e.dept, ok: 0, late: 0, norecord: 0, leave_days: 0, leave_by: {},
       gps_issues: 0, missing_in: 0, missing_out: 0, hours_sum: 0, hours_n: 0, in_min_sum: 0, in_n: 0, late_streak: 0, days: [],
     };
     for (const date of dates) {
@@ -97,7 +97,7 @@ export async function periodReport(start: string, end: string, sb: SupabaseClien
       else if (inScope && isWork(date) && date < today) status = "norecord";
       if (lv && inScope) {
         s.leave_days += lv.frac;
-        if (lv.type === "sick") s.leave_sick += lv.frac; else if (lv.type === "personal") s.leave_personal += lv.frac; else s.leave_vacation += lv.frac;
+        s.leave_by[lv.type] = (s.leave_by[lv.type] ?? 0) + lv.frac;
       }
       if (status === "off") continue;
       const gps = ps.filter((p) => !p.gps_ok).length;

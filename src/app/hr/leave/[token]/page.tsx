@@ -1,7 +1,7 @@
 // src/app/hr/leave/[token]/page.tsx
-import { getLeave, leaveIdFromToken } from "@/lib/leave";
+import { getLeave, leaveIdFromToken, leaveName, quotaLine } from "@/lib/leave";
 import { thDate } from "@/lib/time";
-import { LEAVE_TH, STATUS_TH } from "@/lib/types";
+import { STATUS_TH } from "@/lib/types";
 import { decideByToken } from "../../actions";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function HrLeave({ params, searchParams }: { params: { toke
     return <main className="mx-auto max-w-md p-6"><p className="rounded-2xl bg-white p-6 text-center shadow">ลิงก์นี้ไม่ถูกต้องหรือหมดอายุ (ใช้ได้ 14 วัน)<br />กรุณาอนุมัติที่หน้า /admin/leaves</p></main>;
   }
   const rows: [string, string][] = [
-    ["พนักงาน", `${l.employees?.name ?? "-"}${l.dept ? ` (${l.dept})` : ""}`], ["ประเภท", LEAVE_TH[l.leave_type]],
+    ["พนักงาน", `${l.employees?.name ?? "-"}${l.dept ? ` (${l.dept})` : ""}`], ["ประเภท", leaveName(l)], ["สิทธิ์ปีนี้", (l.over_quota ? "⚠️ เกินสิทธิ์ · " : "") + (await quotaLine(l))],
     ["เริ่มลา", thDate(l.start_date)], ["จำนวน", `${l.days} วัน`], ["เหตุผล", l.reason ?? "-"], ["ติดต่อ", l.contact ?? "-"],
   ];
   return (

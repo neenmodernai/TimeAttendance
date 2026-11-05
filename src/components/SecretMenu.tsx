@@ -35,17 +35,20 @@ function hook() {
 }
 if (typeof window !== "undefined") hook();
 
-/** Wrap any title/badge: 3 quick clicks opens the secret menu. */
-export function SecretTitle({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+/** 3 quick taps on the wrapped element. target "hr" opens the HR login, "dev" opens the owner-only developer menu. */
+export function TripleTap({ children, className = "", target }: { children: React.ReactNode; className?: string; target: "hr" | "dev" }) {
   const n = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   return (
-    <div className={`cursor-pointer select-none ${className}`} onClick={() => {
+    <span className={`cursor-pointer select-none ${className}`} onClick={() => {
       n.current++;
       clearTimeout(timer.current);
-      if (n.current >= 3) { n.current = 0; window.dispatchEvent(new Event("open-secret-menu")); }
-      else timer.current = setTimeout(() => { n.current = 0; }, 800);
-    }}>{children}</div>
+      if (n.current >= 3) {
+        n.current = 0;
+        if (target === "hr") window.location.href = "/admin";
+        else window.dispatchEvent(new Event("open-secret-menu"));
+      } else timer.current = setTimeout(() => { n.current = 0; }, 800);
+    }}>{children}</span>
   );
 }
 
@@ -55,18 +58,19 @@ const btn = "rounded-lg bg-slate-800 px-3 py-2 text-xs font-semibold text-white 
 
 export function SecretMenu() {
   const [open, setOpen] = useState(false);
-  const [admin, setAdmin] = useState<boolean | null>(null);
+  const [admin, setAdmin] = useState<boolean | null>(null); // true = owner session
   const [pw, setPw] = useState(""); const [err, setErr] = useState("");
   const [pin, setPin] = useState(""); const [hash, setHash] = useState("");
   const [out, setOut] = useState(""); const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<Log[]>([]);
 
   useEffect(() => {
-    const h = () => { setOpen(true); setLogs([...LOGS]); post({ action: "whoami" }).then((j) => setAdmin(!!j.admin)); };
+    const h = () => { setOpen(true); setLogs([...LOGS]); post({ action: "whoami" }).then((j) => setAdmin(!!j.owner)); };
     window.addEventListener("open-secret-menu", h);
     return () => window.removeEventListener("open-secret-menu", h);
   }, []);
   if (!open) return null;
+  const onAdmin = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
 
   const run = async (body: object) => { setBusy(true); setOut("…"); const j = await post(body); setOut(JSON.stringify(j, null, 2)); setBusy(false); };
   async function login() {
@@ -79,14 +83,14 @@ export function SecretMenu() {
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center" onClick={() => setOpen(false)}>
       <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between border-b pb-2">
-          <h2 className="font-bold text-slate-700">Admin Secret Menu <span className="text-xs font-normal text-slate-400">v{APP_VERSION}</span></h2>
+          <h2 className="font-bold text-slate-700">เมนูนักพัฒนา <span className="text-xs font-normal text-slate-400">v{APP_VERSION}</span></h2>
           <button className="text-2xl text-slate-400" onClick={() => setOpen(false)}>&times;</button>
         </div>
 
         {admin === null && <p className="text-sm text-slate-400">กำลังตรวจสอบ…</p>}
         {admin === false && (
           <div className="space-y-2">
-            <p className="text-sm text-slate-500">ใส่รหัสผ่านผู้ดูแลเพื่อเปิดเมนู</p>
+            <p className="text-sm text-slate-500">เมนูนี้สำหรับเจ้าของระบบเท่านั้น ใส่รหัสเจ้าของ (OWNER_PASSWORD)</p>
             <input type="password" className={box} value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} />
             {err && <p className="text-xs text-red-600">{err}</p>}
             <button className={btn} onClick={login}>เข้าสู่ระบบ</button>
@@ -96,7 +100,9 @@ export function SecretMenu() {
         {admin && (
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2">
-              <a href="/admin/hr" className={btn}>📊 HR Dashboard</a><a href="/admin" className={btn}>หน้าผู้ดูแล</a><a href="/admin/leaves" className={btn}>ใบลา</a>
+              {onAdmin
+                ? <a href="/" className={btn}>← กลับหน้าลงเวลา</a>
+                : <a href="/admin" className={btn}>เปิดหน้า HR</a>}
             </div>
 
             <section>

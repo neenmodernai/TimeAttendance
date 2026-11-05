@@ -4,7 +4,7 @@ import { db, getSettings } from "@/lib/db";
 import { appUrl, mailConfigured, sendMail, wrap } from "@/lib/mail";
 import { hashPin, validPin } from "@/lib/pin";
 import { runReminders } from "@/lib/reminders";
-import { checkAdminPassword, isAdmin, setSession } from "@/lib/session";
+import { getRole, isOwner, roleForPassword, setSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 const mask = (e: string) => e.replace(/^(.).*(@.*)$/, "$1***$2");
@@ -13,16 +13,17 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   const no = NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  if (b.action === "whoami") return NextResponse.json({ admin: isAdmin() });
+  // The developer menu is owner-only: the HR password does not open it.
+  if (b.action === "whoami") return NextResponse.json({ owner: isOwner(), role: getRole() });
   if (b.action === "login") {
-    if (!checkAdminPassword(String(b.password ?? ""))) {
+    if (roleForPassword(String(b.password ?? "")) !== "owner") {
       await new Promise((r) => setTimeout(r, 1000));
-      return NextResponse.json({ error: "รหัสผ่านไม่ถูกต้อง" }, { status: 401 });
+      return NextResponse.json({ error: "รหัสเจ้าของไม่ถูกต้อง" }, { status: 401 });
     }
-    setSession("admin", undefined, 0.5);
+    setSession("admin", "owner", 0.5);
     return NextResponse.json({ ok: true });
   }
-  if (!isAdmin()) return no;
+  if (!isOwner()) return no;
 
   const sb = db();
   switch (b.action) {
@@ -46,6 +47,8 @@ export async function POST(req: Request) {
         settings: { lateFrom: s.lateFrom, workDays: s.workDays, holidays: s.holidays.length, remindEnabled: s.remindEnabled },
         email: { gmail_configured: mailConfigured(), hr_email: s.hrEmail ? mask(s.hrEmail.split(/[,;\s]+/)[0]) : null },
         cron_secret_set: !!process.env.CRON_SECRET, last_reminders: log,
+        owner: { email_set: !!process.env.OWNER_EMAIL, hr_password_differs: !!process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD !== process.env.OWNER_PASSWORD },
+        pending_changes: (await sb.from("change_requests").select("id", { count: "exact", head: true }).eq("status", "pending")).count,
       });
     }
     case "test_mail": {

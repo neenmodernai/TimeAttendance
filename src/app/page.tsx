@@ -1,16 +1,43 @@
 // src/app/page.tsx
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { SecretTitle } from "@/components/SecretMenu";
+import { TripleTap } from "@/components/SecretMenu";
 import { APP_VERSION } from "@/lib/version";
-import { DEPTS, KIND_TH, LEAVE_TH, STATUS_TH, Kind, LeaveType, LeaveStatus } from "@/lib/types";
+import { DEPTS, KIND_TH, STATUS_TH, Kind, LeaveType, LeaveStatus } from "@/lib/types";
+import type { QuotaRow } from "@/lib/quota";
 
 type Punch = { kind: Kind; punched_at: string; work_date: string; gps_ok: boolean };
 type Leave = { id: string; leave_type: LeaveType; start_date: string; days: number; reason: string; status: LeaveStatus };
 type Me = {
   employee: { id: string; name: string; dept: string | null; contact: string | null; email: string | null };
   today: string; lateFrom: string; isWorkday: boolean; punches: Punch[]; leaves: Leave[];
+  typeNames: Record<string, string>; quota: QuotaRow[];
 };
+const fd = (d: number | null) => (d === null ? "∞" : Number.isInteger(d) ? String(d) : d.toFixed(1));
+
+/** Compact "remaining / limit" balance for each leave type. */
+function QuotaChips({ quota, year }: { quota: QuotaRow[]; year: string }) {
+  if (!quota.length) return null;
+  return (
+    <section className="rounded-2xl bg-white p-4 shadow-sm">
+      <h2 className="mb-2 text-sm font-semibold text-slate-500">สิทธิ์การลาปี {Number(year) + 543}</h2>
+      <div className="grid grid-cols-3 gap-2">
+        {quota.map((q) => {
+          const low = q.remaining !== null && q.limit !== null && q.remaining <= Math.max(1, q.limit * 0.2);
+          return (
+            <div key={q.code} className={`rounded-xl p-2 text-center ${low ? "bg-orange-50" : "bg-slate-50"}`}>
+              <p className="text-xs text-slate-500">{q.name_th}</p>
+              <p className={`text-lg font-bold ${low ? "text-orange-600" : "text-slate-800"}`}>
+                {q.limit === null ? "ไม่จำกัด" : <>{fd(q.remaining)}<span className="text-xs font-normal text-slate-400">/{fd(q.limit)}</span></>}
+              </p>
+              <p className="text-[10px] text-slate-400">ใช้ {fd(q.used)}{q.pending ? ` · รอ ${fd(q.pending)}` : ""}</p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 const hhmm = (iso: string) =>
   new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
@@ -59,8 +86,8 @@ function Login({ onDone }: { onDone: () => void }) {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center p-5">
       <div className="relative rounded-3xl bg-white p-6 shadow-xl">
-        <SecretTitle className="absolute right-4 top-2 text-[10px] text-slate-300">v{APP_VERSION}</SecretTitle>
-        <SecretTitle><h1 className="text-center text-2xl font-bold text-indigo-600">ลงเวลาและลางาน</h1></SecretTitle>
+        <TripleTap target="hr" className="absolute right-4 top-2 text-[10px] text-slate-300">v{APP_VERSION}</TripleTap>
+        <h1 className="text-center text-2xl font-bold text-indigo-600">ลงเวลาและลางาน</h1>
         <p className="mb-6 text-center text-sm text-slate-500">เข้าสู่ระบบครั้งเดียว ใช้ต่อได้ทั้งเดือน</p>
         <label className={label}>ชื่อของคุณ</label>
         <select className={input} value={id} onChange={(e) => setId(e.target.value)}>
@@ -93,11 +120,11 @@ function App({ me, reload, onLogout }: { me: Me; reload: () => void; onLogout: (
   return (
     <main className="mx-auto max-w-md pb-24">
       <header className="relative flex items-center justify-between bg-indigo-600 px-5 py-4 text-white">
-        <SecretTitle className="absolute right-2 top-0.5 text-[10px] opacity-40">v{APP_VERSION}</SecretTitle>
-        <SecretTitle>
+        <TripleTap target="hr" className="absolute right-2 top-0.5 text-[10px] opacity-40">v{APP_VERSION}</TripleTap>
+        <div>
           <p className="text-xs text-indigo-200">สวัสดี</p>
           <p className="text-lg font-bold leading-tight">{me.employee.name}</p>
-        </SecretTitle>
+        </div>
         <button onClick={onLogout} className="rounded-lg bg-white/15 px-3 py-1.5 text-xs">ออกจากระบบ</button>
       </header>
       <div className="p-4">
@@ -198,6 +225,7 @@ function PunchTab({ me, reload }: { me: Me; reload: () => void }) {
           ))}
         </ul>
       </section>
+      <QuotaChips quota={me.quota} year={me.today.slice(0, 4)} />
     </div>
   );
 }
@@ -210,6 +238,12 @@ function LeaveTab({ me, reload, done }: { me: Me; reload: () => void; done: () =
   });
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f, v: string) => setF((p) => ({ ...p, [k]: v }));
+  const q = me.quota.find((x) => x.code === f.leave_type);
+  const want = Number(f.days) || 0;
+  const sameYear = f.start_date.slice(0, 4) === me.today.slice(0, 4); // balance shown is for this year
+  const overBy = q && q.remaining !== null && sameYear ? want - q.remaining : 0;
+  const blocked = overBy > 0 && !q?.allow_over;
+
 
   async function submit() {
     setBusy(true); setErr("");
@@ -224,10 +258,11 @@ function LeaveTab({ me, reload, done }: { me: Me; reload: () => void; done: () =
       <div>
         <label className={label}>ประเภทการลา</label>
         <div className="grid grid-cols-3 gap-2">
-          {(Object.keys(LEAVE_TH) as LeaveType[]).map((k) => (
-            <button key={k} onClick={() => set("leave_type", k)}
-              className={`rounded-xl border py-3 text-sm font-semibold ${f.leave_type === k ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-300 bg-white text-slate-600"}`}>
-              {LEAVE_TH[k]}
+          {me.quota.map((t) => (
+            <button key={t.code} onClick={() => set("leave_type", t.code)}
+              className={`rounded-xl border py-2.5 text-sm font-semibold ${f.leave_type === t.code ? "border-indigo-600 bg-indigo-50 text-indigo-700" : "border-slate-300 bg-white text-slate-600"}`}>
+              {t.name_th}
+              <span className="block text-[11px] font-normal text-slate-400">{t.limit === null ? "ไม่จำกัด" : `เหลือ ${fd(t.remaining)}/${fd(t.limit)}`}</span>
             </button>
           ))}
         </div>
@@ -256,8 +291,15 @@ function LeaveTab({ me, reload, done }: { me: Me; reload: () => void; done: () =
         <div><label className={label}>อีเมล (ถ้ามี)</label><input type="email" className={input} value={f.email} onChange={(e) => set("email", e.target.value)} /></div>
       </div>
       <div><label className={label}>เหตุผลการลา</label><textarea rows={3} className={input} value={f.reason} onChange={(e) => set("reason", e.target.value)} /></div>
+      {overBy > 0 && (
+        <p className={`rounded-lg p-3 text-center text-sm ${blocked ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"}`}>
+          {blocked
+            ? `${q!.name_th}เหลือ ${fd(q!.remaining)} วัน ขอได้ไม่เกินนี้ — ติดต่อ HR หากต้องการลาเพิ่ม`
+            : `เกินสิทธิ์${q!.name_th} ${fd(overBy)} วัน ยังส่งได้ แต่ HR จะเห็นว่าเกินสิทธิ์`}
+        </p>
+      )}
       {err && <p className="rounded-lg bg-red-50 p-3 text-center text-sm text-red-600">{err}</p>}
-      <button disabled={busy || !f.leave_type} onClick={submit}
+      <button disabled={busy || !f.leave_type || blocked} onClick={submit}
         className="w-full rounded-xl bg-indigo-600 py-3.5 text-lg font-bold text-white shadow disabled:opacity-40">
         {busy ? "กำลังส่ง…" : "ส่งใบลา"}
       </button>
@@ -276,6 +318,7 @@ function HistoryTab({ me }: { me: Me }) {
   const days = [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   return (
     <div className="space-y-5">
+      <QuotaChips quota={me.quota} year={me.today.slice(0, 4)} />
       <section>
         <h2 className="mb-2 text-sm font-semibold text-slate-500">ใบลาของฉัน</h2>
         {me.leaves.length === 0 && <p className="text-sm text-slate-400">ยังไม่มีใบลา</p>}
@@ -283,7 +326,7 @@ function HistoryTab({ me }: { me: Me }) {
           {me.leaves.map((l) => (
             <li key={l.id} className="rounded-2xl bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="font-semibold">{LEAVE_TH[l.leave_type]} · {l.days} วัน</span>
+                <span className="font-semibold">{me.typeNames[l.leave_type] ?? l.leave_type} · {l.days} วัน</span>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${badge[l.status]}`}>{STATUS_TH[l.status]}</span>
               </div>
               <p className="text-sm text-slate-500">เริ่ม {thDate(l.start_date)}</p>

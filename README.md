@@ -4,7 +4,7 @@
 Replaces Google Form + Apps Script + Sheets. Staff UI at `/`, admin at `/admin`.
 
 ## 1. Supabase (once)
-1. Create a project. Dashboard → **SQL Editor** → run `supabase/migrations/001_init.sql`, then `supabase/migrations/002_hr_features.sql`.
+1. Create a project. Dashboard → **SQL Editor** → run `supabase/migrations/001_init.sql`, then `002_hr_features.sql`, then `003_leave_quotas_owner.sql`.
 2. Project Settings → API: copy the **Project URL** and the **service_role** key (server only!).
 
 ## 2. Local setup + import your old data
@@ -32,11 +32,18 @@ Expected: an error like `permission denied for table employees` (not rows, not e
 3. Send staff the Vercel link. Keep the old Sheet as a read-only archive.
 
 ## Changing rules later
-- Late time, work days, holidays: `/admin/employees` → Settings.
+- Late time, work days, holidays, HR email: `/admin/settings`.
 - Work sites / radius: Supabase → Table Editor → `sites`.
 
 ## HR features
 - **Leave → HR email:** every new request emails HR (Settings → HR email) with Approve / Deny buttons. The link opens a confirmation page (works without login, token expires in 14 days, scanners that pre-open links cannot approve). The employee is emailed the result if they gave an email. Needs `GMAIL_USER` + `GMAIL_APP_PASSWORD`.
 - **No-punch reminders:** `vercel.json` runs `/api/cron/remind` at ~09:30 (no check-in) and ~19:00 (no check-out) Bangkok time on Mon–Sat. Staff with an email get a reminder, HR gets the list. Work days/holidays/leave are respected. Vercel Hobby cron fires "sometime within the scheduled hour" (not to the minute) and allows 2 daily jobs. Needs `CRON_SECRET`. Staff also see a red banner in the app once it is past the late time.
-- **HR Dashboard:** `/admin/hr` (also linked from the secret menu): on-time/late/leave %, per-person table, rankings, arrival-time and weekday charts, monthly trend, per-department, CSV export.
-- **Secret menu:** triple-click the title or the `v3.0.0` badge (staff app and admin). Admin password required. Version history, PIN hash generator, diagnostics (DB speed, email/cron configured), test email, reminder dry-run, live console log.
+- **HR area:** `/admin` (bookmark it; also reachable from the secret menu). Tabs: ภาพรวม (today + on-time/late/leave %, rankings, charts, CSV), ใบลา, รายบุคคล (one person's month), พนักงาน, ตั้งค่า. `← หน้าลงเวลา` returns to the staff app.
+- **Who opens what:** triple-tap the version number (`v3.2.0`) → HR login. HR password (`ADMIN_PASSWORD`) = HR access; owner password (`OWNER_PASSWORD`) = everything, including approving HR's policy changes. Triple-tap the © footer line → developer menu, owner password only. Version history, PIN hash generator, diagnostics (DB speed, email/cron configured), test email, reminder dry-run, live console log.
+
+## Leave limits (v3.2)
+- `/admin/leave-types`: each leave type has a yearly limit (calendar year, by start date; blank = unlimited) and a "ลาเกินได้" switch. Defaults: sick 30 (can go over, flagged), personal 3, vacation 6 — based on the Thai Labour Protection Act minimums; confirm against company policy.
+- Per-employee limits override the default (e.g. extra vacation with seniority).
+- Staff see their remaining balance on the home screen, on each leave-type button, and in history; a request past the limit is blocked (or flagged when "ลาเกินได้" is on). Pending requests count against the balance.
+- HR can change the type of a single request on the ใบลา tab (direct, no approval).
+- Changing types or limits as HR creates a request in `/admin/approvals`; the owner is emailed (`OWNER_EMAIL`) and approves there or from the email link. Owner changes apply immediately and are logged.
