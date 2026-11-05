@@ -34,7 +34,13 @@ const leaves = data.leaves.map(({ employee_name, ...l }) => ({ ...l, employee_id
 await must("leaves", sb.from("leave_requests").upsert(leaves, { onConflict: "legacy_key", ignoreDuplicates: true }));
 
 // 4) verify against the source file
-const count = async (t, f) => { let q = sb.from(t).select("id", { count: "exact", head: true }); if (f) q = f(q); return (await must("count " + t, q)).count ?? 0; };
+const count = async (t, f) => {
+  let q = sb.from(t).select("id", { count: "exact", head: true });
+  if (f) q = f(q);
+  const { count: c, error } = await q; // head requests return the number in `count`, not in `data`
+  if (error) { console.error("count", t, "FAILED:", error.message); process.exit(1); }
+  return c ?? 0;
+};
 const got = {
   employees: await count("employees"),
   punches: await count("punches", (q) => q.eq("source", "legacy")),
