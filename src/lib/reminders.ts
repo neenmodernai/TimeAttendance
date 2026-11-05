@@ -43,7 +43,7 @@ export async function runReminders(kind: ReminderKind, opts: { dry?: boolean; fo
     const li = targets.map((t) => `<li>${esc(t.name)}${t.dept ? ` (${esc(t.dept)})` : ""}${t.email ? "" : " <i style='color:#94a3b8'>— ไม่มีอีเมลในระบบ</i>"}</li>`).join("");
     digest = await sendMail(s.hrEmail, `[${kind === "morning" ? "ไม่ลงเวลาเข้า" : "ไม่ลงเวลาออก"}] ${targets.length} คน · ${thDate(today)}`,
       wrap(`<h2 style="margin:0 0 8px">${kind === "morning" ? "ยังไม่ลงเวลาเข้างาน" : "ลงเวลาเข้าแล้วแต่ยังไม่ออกงาน"} (${targets.length} คน)</h2><ul>${li}</ul>
-        ${btn(appUrl() + "/admin/hr", "เปิด HR Dashboard", "#4f46e5")}`));
+        ${btn(appUrl() + "/admin", "เปิดหน้า HR", "#4f46e5")}`));
   }
   return { ...base, targets: list, emailed, digest };
 }
